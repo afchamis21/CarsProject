@@ -5,13 +5,20 @@ import pyodbc
 from PyQt5.uic import loadUi
 from PyQt5.QtWidgets import QMainWindow, QStackedWidget, QApplication, QTableWidgetItem, QHeaderView, QDialog, \
     QFileDialog
-from PyQt5.QtCore import QFileInfo, Qt
+from PyQt5.QtCore import QFileInfo
 import imagens.imagens
 import time
-import xlsxwriter
 from getmac import get_mac_address as gma
 import yagmail
 from fpdf import FPDF
+
+
+class User:
+    def __init__(self, usuario, nome, sobrenome, email):
+        self.usuario = usuario
+        self.nome = nome
+        self.sobrenome = sobrenome
+        self.email = email
 
 
 class LoginWindow(QMainWindow):
@@ -28,18 +35,14 @@ class LoginWindow(QMainWindow):
             self.error_label.setText(mensagem)
 
     def login(self):
-        # Cria variáveis globais para uso futuro e faz o login conferindo user e senha no SQL além de habilitar a função
+        # Cria variáveis globais para uso futuro e faz o ‘login’ conferindo user e senha no SQL além de habilitar a função
         # De lembrar do usuário, transformando uma coluna do SQL, para o usuário, em 1
         if self.error_label.text() in ['Licença de Uso Vencida', 'Licença de Uso Inválida']:
             return
-        global global_username
-        global global_name
-        global global_surname
-        global global_email
-        global_username = self.login_edit.text()
+        username = self.login_edit.text()
         password = self.password_edit.text()
         if password != '':
-            query = f"SELECT * FROM logins WHERE loginUsuario = '{global_username}' and pwdcompare('{password}', senhaUsuario) = 1"
+            query = f"SELECT * FROM logins WHERE loginUsuario = '{username}' and pwdcompare('{password}', senhaUsuario) = 1"
             try:
                 cur.execute(query)
                 result_user = cur.fetchone()
@@ -47,27 +50,28 @@ class LoginWindow(QMainWindow):
                     self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
                     self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
                     self.error_label.setText('Usuário ou Senha Incorretos')
-                elif global_username == result_user[1]:
+                elif username == result_user[1]:
                     query_update = f"UPDATE logins SET record_User='0'"
                     cur.execute(query_update)
                     connection.commit()
                     if self.RememberLoginBox.isChecked() is True:
-                        query_user = f"UPDATE logins SET record_User = '1' WHERE loginUsuario='{global_username}'"
+                        query_user = f"UPDATE logins SET record_User = '1' WHERE loginUsuario='{username}'"
                         cur.execute(query_user)
                         connection.commit()
-                    if global_username == 'admin':
+                    if username == 'admin':
                         register_window = RegisterWindow()
                         widget.addWidget(register_window)
                         widget.setCurrentIndex(widget.currentIndex() + 1)
                         widget.showMaximized()
                     else:
-                        query_data = f"SELECT * FROM logins WHERE loginUsuario = '{global_username}'"
+                        query_data = f"SELECT * FROM logins WHERE loginUsuario = '{username}'"
                         cur.execute(query_data)
-                        global_variables = cur.fetchone()[3:6]
-                        global_name = global_variables[0]
-                        global_surname = global_variables[1]
-                        global_email = global_variables[2]
-                        main_window = MainWindow()
+                        user_variables = cur.fetchone()[3:6]
+                        user_name = user_variables[0]
+                        user_surname = user_variables[1]
+                        user_email = user_variables[2]
+                        logged_in_user = User(username, user_name, user_surname, user_email)
+                        main_window = MainWindow(logged_in_user)
                         widget.addWidget(main_window)
                         widget.setCurrentIndex(widget.currentIndex() + 1)
                         widget.showMaximized()
@@ -86,15 +90,15 @@ class LoginWindow(QMainWindow):
         warning_popup_window.open_pop()
 
 
-class AvisoLicencaPopUp(QDialog):
+class LicenceWarningPopUp(QDialog):
     def __init__(self):
-        super(AvisoLicencaPopUp, self).__init__()
+        super(LicenceWarningPopUp, self).__init__()
         loadUi(r"paginas/AvisoLicensaPopUp.ui", self)
         self.setFixedHeight(150)
         self.setFixedWidth(250)
         self.OK_button.clicked.connect(self.close)
 
-    def openLicensePopUp(self):
+    def open_license_pop_up(self):
         self.content_label.setText(f'Sua licença de uso expira em {due_date}')
         self.exec_()
 
@@ -113,9 +117,8 @@ class AvisoPopup(QDialog):
 
     def banco_edit_popup(self):
         sql_popup_window = BancoEditPopup()
-        sql_popup_window.openPop()
+        sql_popup_window.open_pop()
         self.close()
-
 
 
 class BancoEditPopup(QDialog):
@@ -125,7 +128,7 @@ class BancoEditPopup(QDialog):
         self.setWindowTitle('Banco de Dados')
         self.setFixedHeight(160)
         self.setFixedWidth(226)
-        self.OK_button.clicked.connect(self.createTXT)
+        self.OK_button.clicked.connect(self.create_txt)
         with open(r"conexao/connection.txt", "r") as file:
             content = file.read()
         server = content.split(';')[0][7:]
@@ -133,10 +136,10 @@ class BancoEditPopup(QDialog):
         self.server_edit.setText(server)
         self.banco_edit.setText(banco)
 
-    def openPop(self):
+    def open_pop(self):
         self.exec_()
 
-    def createTXT(self):
+    def create_txt(self):
         with open(r"conexao/connection.txt", "w") as file:
             server = self.server_edit.text()
             banco = self.banco_edit.text()
@@ -145,83 +148,82 @@ class BancoEditPopup(QDialog):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, user):
         super(MainWindow, self).__init__()
         loadUi("paginas/MainScreen.ui", self)
-        self.Consult_Button.clicked.connect(self.goToConsult)
-        self.Add_Button.clicked.connect(self.goToAdd)
-        self.Delete_Button.clicked.connect(self.goToAlter)
-        self.Logout_Button_2.clicked.connect(self.goToLogin)
-        self.user_pushButton.clicked.connect(self.goToConfig)
-        self.name_label.setText(global_name)
+        self.user = user
+        self.Consult_Button.clicked.connect(self.go_to_consult)
+        self.Add_Button.clicked.connect(self.go_to_add)
+        self.Delete_Button.clicked.connect(self.go_to_alter)
+        self.Logout_Button_2.clicked.connect(self.go_to_login)
+        self.user_pushButton.clicked.connect(self.go_to_config)
+        self.name_label.setText(self.user.nome)
         self.label_3.setText(f'Licença Válida Até: {due_date}')
 
     @staticmethod
-    def goToLogin():
+    def go_to_login():
         # Realiza logout e vai pra tela de login
-        logIn_page = LoginWindow()
-        widget.addWidget(logIn_page)
+        log_in_page = LoginWindow()
+        widget.addWidget(log_in_page)
         try:
-            query_remember = "SELECT loginUsuario FROM logins WHERE record_User = 1"
-            cur.execute(query_remember)
-            remembered_user = cur.fetchone()[0]
-            logIn_page.login_edit.setText(remembered_user)
-            logIn_page.RememberLoginBox.setChecked(True)
+            query_remember_user = "SELECT loginUsuario FROM logins WHERE record_User = 1"
+            cur.execute(query_remember_user)
+            remembered_user_from_main = cur.fetchone()[0]
+            log_in_page.login_edit.setText(remembered_user_from_main)
+            log_in_page.RememberLoginBox.setChecked(True)
         except:
-            logIn_page.login_edit.setText('')
+            log_in_page.login_edit.setText('')
         widget.setCurrentIndex(widget.currentIndex() + 1)
 
-    @staticmethod
-    def goToConfig():
+    def go_to_config(self):
         # Vai para a página de configuração
-        config_page = ConfigWindow()
+        config_page = ConfigWindow(self.user)
         widget.addWidget(config_page)
         widget.setCurrentIndex(widget.currentIndex() + 1)
 
-    @staticmethod
-    def goToConsult():
+    def go_to_consult(self):
         # Vai para a página de consulta
-        consult_page = ConsultWindow()
+        consult_page = ConsultWindow(self.user)
         widget.addWidget(consult_page)
         widget.setCurrentIndex(widget.currentIndex() + 1)
 
-    @staticmethod
-    def goToAdd():
+    def go_to_add(self):
         # Vai para a página de adicionar ao SQL
-        add_page = AddWindow()
+        add_page = AddWindow(self.user)
         widget.addWidget(add_page)
         widget.setCurrentIndex(widget.currentIndex() + 1)
 
-    @staticmethod
-    def goToAlter():
+    def go_to_alter(self):
         # Vai para a página de editar dados do SQL
-        alteration_page = AlterationVehicleWindow()
+        alteration_page = AlterationVehicleWindow(self.user)
         widget.addWidget(alteration_page)
         widget.setCurrentIndex(widget.currentIndex() + 1)
 
 
 class ConsultWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, user):
         super(ConsultWindow, self).__init__()
         loadUi(r"paginas/ConsultScreen.ui", self)
-        self.consult_button.clicked.connect(self.searchDataBase)
-        self.tableWidget.itemClicked.connect(self.selectDate)
-        self.back_button.clicked.connect(self.goBack)
-        self.mail_button.clicked.connect(self.openPopUp)
-        self.download_button.clicked.connect(self.createPDF)
-        self.consult_edit.returnPressed.connect(self.searchDataBase)
-        self.edit_button.clicked.connect(self.goToAlter)
+        self.user = user
+        self.consult_button.clicked.connect(self.search_data_base)
+        self.tableWidget.itemClicked.connect(self.select_date)
+        self.back_button.clicked.connect(self.go_back)
+        self.mail_button.clicked.connect(self.open_pop_up)
+        self.download_button.clicked.connect(self.create_pdf)
+        self.consult_edit.returnPressed.connect(self.search_data_base)
+        self.edit_button.clicked.connect(self.go_to_alter)
         self.right_button.clicked.connect(self.increase_index)
         self.left_button.clicked.connect(self.decrease_index)
         self.listWidget.itemDoubleClicked.connect(self.open_docs)
         self.tableWidget.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.reports = []
         self.listWidget.hide()
         self._images = []
         self._index_images = 0
         self._documents = []
 
-    def goToAlter(self):
-        alteration_page = AlterationVehicleWindow()
+    def go_to_alter(self):
+        alteration_page = AlterationVehicleWindow(self.user)
         widget.addWidget(alteration_page)
         try:
             plate = self.tableWidget.item(self.tableWidget.currentRow(), 0).text()
@@ -230,19 +232,25 @@ class ConsultWindow(QMainWindow):
             pass
         widget.setCurrentIndex(widget.currentIndex() + 1)
 
-    def openPopUp(self):
+    def open_pop_up(self):
         # Cria o arquivo excel e abre o popup
-        self.createPDF()
-        popupWindow = PopUpWIndow(self)
-        popupWindow.openPage()
+        self.create_pdf()
+        popup_window = EmailPopUpWindow(self)
+        popup_window.open_page()
 
-    def createPDF(self):
-        global global_filename
+    def create_pdf(self):
+        with open("conexao/config_relatorio.txt", "r") as relatorio_config:
+            content = int(relatorio_config.read())
+        self.reports = []
+        if content:
+            self.create_multiple_pdf()
+        else:
+            self.create_unique_pdf()
+
+    def create_multiple_pdf(self):
         t = time.localtime()
         current_date = time.strftime("%d-%m", t)
-        selector = self.filter_comboBox.currentText()
-        search = self.consult_edit.text().upper()
-        global_filename = f'relatorios/Relatório {selector} {search} {current_date}.pdf'
+
         rows = self.tableWidget.rowCount()
         if not rows:
             self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
@@ -251,13 +259,91 @@ class ConsultWindow(QMainWindow):
             return
         columns = self.tableWidget.columnCount()
 
-        pdf = FPDF('P','mm','A4')
+        try:
+            for row in range(rows):
+                filename = f'relatorios/Relatório PLACA {self.tableWidget.item(row, 0).text()} {current_date}.pdf'
+                self.reports.append(filename)
+                pdf = FPDF('P', 'mm', 'A4')
+                pdf.add_page()
+                pdf.set_auto_page_break(True, 10)
+                pdf.set_font("helvetica", size=12)
+
+                pdf.cell(0, txt=filename.split('/')[1][:-4], ln=1, align='C')
+                pdf.set_font("helvetica", size=8)
+
+                height_top = 50
+                height_bottom = -45
+                for column in range(columns):
+                    data = self.tableWidget.item(row, column).text()
+                    if not data:
+                        data = 'N/A'
+
+                    if column == 0:
+                        pdf.cell(-1, height_top, txt="Placa", align='L')
+                        pdf.cell(52, height_top + 10, txt=data, align='L')
+
+                    elif column == 1:
+                        pdf.cell(-1, height_top, txt="Modelo", align='L')
+                        pdf.cell(52, height_top + 10, txt=data, align='L')
+
+                    elif column == 2:
+                        pdf.cell(-1, height_top, txt="RDO", align='L')
+                        pdf.cell(52, height_top + 10, txt=data, align='L')
+
+                    elif column == 3:
+                        pdf.cell(-1, height_top, txt="DP", align='L')
+                        pdf.cell(52, height_top + 10, txt=data, ln=1, align='L')
+
+                    elif column == 4:
+                        pdf.cell(-1, height_bottom, txt="Status", align='L')
+                        pdf.cell(52, height_bottom + 10, txt=data, align='L')
+
+                    elif column == 5:
+                        pdf.cell(-1, height_bottom, txt="Patio do Veículo", align='L')
+                        pdf.cell(52, height_bottom + 10, txt=data, align='L')
+
+                    elif column == 6:
+                        pdf.cell(-1, height_bottom, txt="Data Entrada", align='L')
+                        pdf.cell(52, height_bottom + 10, txt=data, align='L')
+
+                    elif column == 7:
+                        pdf.cell(-1, height_bottom, txt="Data Saída", align='L')
+                        pdf.cell(52, height_bottom + 10, txt=data, ln=1, align='L')
+
+                pdf.cell(0, 10, ln=1)
+                self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
+                self.error_label.setStyleSheet("color: rgb(102,142,57);")
+                self.error_label.setText('Relatório Criado')
+                pdf.output(filename)
+
+        except:
+            self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
+            self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
+            self.error_label.setText('Impossível Criar os Relatórios')
+            return
+
+    def create_unique_pdf(self):
+        t = time.localtime()
+        current_date = time.strftime("%d-%m", t)
+        selector = self.filter_comboBox.currentText()
+        search = self.consult_edit.text().upper()
+        filename = f'relatorios/Relatório {selector} {search} {current_date}.pdf'
+        self.reports.append(filename)
+        rows = self.tableWidget.rowCount()
+        if not rows:
+            self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
+            self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
+            self.error_label.setText('Tabela Vazia')
+            return
+        columns = self.tableWidget.columnCount()
+
+        pdf = FPDF('P', 'mm', 'A4')
         pdf.add_page()
         pdf.set_auto_page_break(True, 10)
         pdf.set_font("helvetica", size=12)
 
-        pdf.cell(0, txt=global_filename.split('/')[1][:-4], ln=1, align='C')
-        pdf.set_font("helvetica", size=10)
+        pdf.cell(0, txt=filename.split('/')[1][:-4], ln=1, align='C')
+        pdf.set_font("helvetica", size=8)
 
         height_top = 50
         height_bottom = -45
@@ -304,16 +390,16 @@ class ConsultWindow(QMainWindow):
             self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
             self.error_label.setStyleSheet("color: rgb(102,142,57);")
             self.error_label.setText('Relatório Criado')
-            pdf.output(global_filename)
+            pdf.output(filename)
         except:
             self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
             self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
             self.error_label.setText('Impossível Criar Relatório')
             return
 
-    def goBack(self):
+    def go_back(self):
         # Retorna para a página principal
-        main_page = MainWindow()
+        main_page = MainWindow(self.user)
         widget.addWidget(main_page)
         widget.setCurrentIndex(widget.currentIndex() + 1)
 
@@ -326,8 +412,8 @@ class ConsultWindow(QMainWindow):
 
     def decrease_index(self):
         if self._images:
-            self._index_images -=1
-            if self._index_images < len(self._images)*-1:
+            self._index_images -= 1
+            if self._index_images < len(self._images) * -1:
                 self._index_images = len(self._images) - 1
             self.show_image()
 
@@ -367,31 +453,31 @@ class ConsultWindow(QMainWindow):
                 documents.append(doc_name)
         return documents
 
-    def selectDate(self):
-        # Mostra a data e horário e imagem, se cadastrada, de registro específicos de um veículo ao clicar na linha
+    def select_date(self):
+        # Mostra a data, horário e imagem, se cadastrada, de registro, específicos de um veículo ao clicar na linha
         plate = self.tableWidget.item(self.tableWidget.currentRow(), 0).text()
         query_time = f"SELECT * FROM registros WHERE placa = '{plate}'"
         cur.execute(query_time)
         result_time = cur.fetchall()[0]
         data = result_time[8]
         hora = result_time[9]
-        imageName = result_time[10]
+        image_name = result_time[10]
         documents = result_time[11]
         if documents:
             self._documents = documents.split(';')
             self._show_docs()
         else:
             self.listWidget.clear()
-        if imageName:
-            self._images = imageName.split(';')
+        if image_name:
+            self._images = image_name.split(';')
             self._index_images = 0
             self.image_label.setStyleSheet(
                 f"background-color: rgb(0, 0, 0); border-image: url({self._images[self._index_images]}); background-position: center; background-repeat: norepeat;")
         else:
             self._reset_image()
-        formattedDate = format_date_from_sql(data)
+        formatted_date = format_date_from_sql(data)
         self.hora_label.setText(hora[:-8])
-        self.data_label.setText(formattedDate)
+        self.data_label.setText(formatted_date)
 
     def _show_docs(self):
         if self.listWidget.count() != 0:
@@ -399,7 +485,7 @@ class ConsultWindow(QMainWindow):
         for doc in self._documents:
             self.listWidget.addItem(doc)
 
-    def searchDataBase(self):
+    def search_data_base(self):
         # Realiza as consultas no SQL e mostra na tabela
         self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 0); border-radius: 10px;")
         self.error_label.setText('')
@@ -578,18 +664,19 @@ class ConsultWindow(QMainWindow):
                 row += 1
                 column = 0
 
-class PopUpWIndow(QDialog):
+
+class EmailPopUpWindow(QDialog):
     def __init__(self, parent):
-        super(PopUpWIndow, self).__init__()
+        super(EmailPopUpWindow, self).__init__()
         loadUi("paginas/ImageNamePopup.ui", self)
         self.setWindowTitle('Envio de E-mail')
-        self.save_button.clicked.connect(self.sendMail)
-        self.textEdit.textChanged.connect(self.switchColorMessage)
-        self.assunto_edit.textChanged.connect(self.switchColorSubject)
+        self.save_button.clicked.connect(self.send_mail)
+        self.textEdit.textChanged.connect(self.switch_color_message)
+        self.assunto_edit.textChanged.connect(self.switch_color_subject)
         self.file_button.clicked.connect(self.select_files)
-        self.imagens_checkBox.stateChanged.connect(self.attatch_images)
-        self.documentos_checkBox.stateChanged.connect(self.attatch_docs)
-        self.relatorios_checkBox.stateChanged.connect(self.attatch_report)
+        self.imagens_checkBox.stateChanged.connect(self.attach_images)
+        self.documentos_checkBox.stateChanged.connect(self.attach_docs)
+        self.relatorios_checkBox.stateChanged.connect(self.attach_report)
         self.remover_button.clicked.connect(self.delete_file)
         self.listWidget.hide()
         self._subject_config = ''
@@ -602,21 +689,28 @@ class PopUpWIndow(QDialog):
         self.check_configurations()
         self.check_message()
 
-    def openPage(self):
+    def open_page(self):
         self.exec_()
 
     def check_configurations(self):
-        with open("conexao/email_configurations.txt","r") as email_config:
+        with open("conexao/email_configurations.txt", "r") as email_config:
             content = email_config.read()
             if content:
                 if '/' in content:
                     self._subject_config = content.split('/')[0].strip()
                     self._message_config = content.split('/')[1].strip()
         if self._subject_config:
-            self.assunto_edit.setText(global_filename.split('/')[1][:-4])
+            if len(self.parent.reports) == 1:
+                self.assunto_edit.setText(self.parent.reports[0].split('/')[1][:-4])
+            else:
+                assunto = 'Relatório'
+                for file in self.parent.reports:
+                    name = file.split('/')[1][:-4] + ', '
+                    assunto += name.replace('Relatório', '')
+                self.assunto_edit.setText(assunto[:-2])
         if self._message_config:
             if """#saudacao,
-        
+
 Segue em anexo #conteudo, referentes ao #nome_do_arquivo
 
 Att""" == self._message_config:
@@ -632,13 +726,18 @@ Att""" == self._message_config:
             greetings = 'Boa tarde'
         else:
             greetings = 'Boa noite'
-
-        self._message_config = self._message_config.replace("#saudacao", greetings).replace("#nome_do_arquivo", global_filename.split('/')[1][:-4])
+        if self.parent.reports:
+            assunto = 'Relatório'
+            for file in self.parent.reports:
+                name = file.split('/')[1][:-4] + ', '
+                assunto += name.replace('Relatório', '')
+            self._message_config = self._message_config.replace("#saudacao", greetings).replace("#nome_do_arquivo",
+                                                                                                assunto[:-2])
         self.textEdit.setPlainText(self._message_config)
 
     @staticmethod
     def convert_size(size):
-        if size >= 1048576 :
+        if size >= 1048576:
             result_size = f"{size * 0.00000095367432 :.2f} MB"
         elif size >= 1024:
             result_size = f"{size * 0.0009765625 :.2f} KB"
@@ -683,13 +782,13 @@ Att""" == self._message_config:
 
     def remove_file(self, file_name):
         substitute = []
-        verifyer = 0
+        verifier = 0
         for content in self._files:
             file = content[1]
-            if file != file_name or verifyer == 1:
+            if file != file_name or verifier == 1:
                 substitute.append(content)
             else:
-                verifyer = 1
+                verifier = 1
                 info = QFileInfo(file)
                 size = info.size()
                 self._total_size -= size
@@ -700,26 +799,26 @@ Att""" == self._message_config:
 
     def select_files(self):
         arquivo = QFileDialog.getOpenFileName(self, 'Selecione o Arquivo', '', 'Todos Arquivos (*.*)')
-        suport_list = [item[1] for item in self._files]
+        support_list = [item[1] for item in self._files]
         if arquivo:
             doc_path = arquivo[0]
             if doc_path:
                 info = QFileInfo(doc_path)
                 size = info.size()
-                if doc_path not in suport_list:
+                if doc_path not in support_list:
                     self._files.append(('file', doc_path))
                     self._total_size += size
 
                     self._update_size()
                     self._update_list()
 
-    def attatch_images(self):
+    def attach_images(self):
         if self.imagens_checkBox.isChecked():
             images = self.parent.select_all_images()
             for image in images:
                 image_list = image.split(';')
                 for image_final in image_list:
-                    self._files.append(('img',image_final))
+                    self._files.append(('img', image_final))
                     info = QFileInfo(image_final)
                     size = info.size()
                     self._total_size += size
@@ -743,7 +842,7 @@ Att""" == self._message_config:
         self._update_list()
         self._update_contents()
 
-    def attatch_docs(self):
+    def attach_docs(self):
         if self.documentos_checkBox.isChecked():
             docs = self.parent.select_all_documents()
             if docs:
@@ -774,12 +873,13 @@ Att""" == self._message_config:
         self._update_list()
         self._update_contents()
 
-    def attatch_report(self):
+    def attach_report(self):
         if self.relatorios_checkBox.isChecked():
-            self._files.append(('report', global_filename))
-            info = QFileInfo(global_filename)
-            size = info.size()
-            self._total_size += size
+            for file in self.parent.reports:
+                self._files.append(('report', file))
+                info = QFileInfo(file)
+                size = info.size()
+                self._total_size += size
             self._contents_message += 'o relatório; '
         else:
             substitute = []
@@ -813,15 +913,16 @@ Att""" == self._message_config:
 
             self.textEdit.setPlainText(self._message_config)
 
-    def sendMail(self):
-        # Envia o email de relatório da tabela para o email atrelado ao usuário. NECESSITA CADASTRO NO OUTLOOK
+    def send_mail(self):
+        # Envia o e-mail de relatório da tabela para o e-mail atrelado ao usuário. NECESSITA CADASTRO NO OUTLOOK
         try:
             if self._total_size > 26214400:
                 return
             if not self.email_edit.text() or '@' not in self.email_edit.text():
                 self.email_edit.setPlaceholderText('Email (Campo Obrigatório)')
                 return
-            with open(r'conexao/email.txt', 'r') as email_data:
+
+            with open(r'conexao/email_login.txt', 'r') as email_data:
                 content = email_data.readlines()
                 email = content[0].strip()
                 senha = content[1].strip()
@@ -834,13 +935,12 @@ Att""" == self._message_config:
                 assunto = ''
 
             if self.textEdit.toPlainText():
-                conteudo = self.textEdit.toPlainText().replace('#','')
+                content = self.textEdit.toPlainText().replace('#', '')
             else:
-                conteudo = ""
+                content = ""
 
             files = [file[1] for file in self._files if QFileInfo(file[1]).size() != 0]
-            print(files)
-            usuario.send(to=remetentes, subject=assunto, contents=conteudo, attachments=files)
+            usuario.send(to=remetentes, subject=assunto, contents=content, attachments=files)
             self.parent.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
             self.parent.error_label.setStyleSheet("color: rgb(102,142,57);")
             self.parent.error_label.setText('Email Enviado')
@@ -848,27 +948,27 @@ Att""" == self._message_config:
         except:
             self.close()
 
-    def switchColorMessage(self):
+    def switch_color_message(self):
         if len(self.textEdit.toPlainText()) == 1:
             self.textEdit.setStyleSheet(
-                "QTextEdit{    border: 2px solid rgb(106, 106, 106); border-radius: 5px; padding: 5px; background-color: rgb(255,255,255);    color: rgb(0,0,0);}"
+                "QTextEdit{border: 2px solid rgb(106, 106, 106); border-radius: 5px; padding: 5px; background-color: rgb(255,255,255);    color: rgb(0,0,0);}"
                 "QTextEdit:hover{ border: 2px solid rgb(117, 117, 179);}"
                 "QTextEdit:focus{ border: 2px solid rgb(117, 117, 179); color: rgb(40, 40, 40);}")
         if not self.textEdit.toPlainText():
             self.textEdit.setStyleSheet(
-                "QTextEdit{    border: 2px solid rgb(106, 106, 106); border-radius: 5px; padding: 5px; background-color: rgb(238,238,238);    color: rgb(0,0,0);}"
+                "QTextEdit{border: 2px solid rgb(106, 106, 106); border-radius: 5px; padding: 5px; background-color: rgb(238,238,238);    color: rgb(0,0,0);}"
                 "QTextEdit:hover{ border: 2px solid rgb(117, 117, 179);}"
                 "QTextEdit:focus{ border: 2px solid rgb(117, 117, 179); color: rgb(40, 40, 40);}")
 
-    def switchColorSubject(self):
+    def switch_color_subject(self):
         if len(self.assunto_edit.text()) == 1:
             self.assunto_edit.setStyleSheet(
-                "QLineEdit{    border: 2px solid rgb(106, 106, 106); border-radius: 5px; padding: 5px; background-color: rgb(255,255,255);    color: rgb(0,0,0);}"
+                "QLineEdit{border: 2px solid rgb(106, 106, 106); border-radius: 5px; padding: 5px; background-color: rgb(255,255,255);    color: rgb(0,0,0);}"
                 "QLineEdit:hover{ border: 2px solid rgb(117, 117, 179);}"
                 "QLineEdit:focus{ border: 2px solid rgb(117, 117, 179); color: rgb(40, 40, 40);}")
         if not self.assunto_edit.text():
             self.assunto_edit.setStyleSheet(
-                "QLineEdit{    border: 2px solid rgb(106, 106, 106); border-radius: 5px; padding: 5px; background-color: rgb(238,238,238);    color: rgb(0,0,0);}"
+                "QLineEdit{border: 2px solid rgb(106, 106, 106); border-radius: 5px; padding: 5px; background-color: rgb(238,238,238);    color: rgb(0,0,0);}"
                 "QLineEdit:hover{ border: 2px solid rgb(117, 117, 179);}"
                 "QLineEdit:focus{ border: 2px solid rgb(117, 117, 179); color: rgb(40, 40, 40);}")
 
@@ -917,11 +1017,13 @@ class FilesPopUp(QDialog):
         self._parent.documents = self._files
         self.close()
 
+
 class AddWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, user):
         super(AddWindow, self).__init__()
         loadUi("paginas/RegisterVehicleScreen.ui", self)
-        self.status_comboBox.currentIndexChanged.connect(self.setExitDateVisible)
+        self.user = user
+        self.status_comboBox.currentIndexChanged.connect(self.set_exit_date_visible)
         self.dataS_edit.setStyleSheet(
             "QLineEdit{border: 2px solid rgba(106, 106, 106,0); border-radius: 5px; padding: 5px; "
             "background-color: rgba(255,255,255,0); color: rgba(0,0,0,0);}")
@@ -961,45 +1063,44 @@ class AddWindow(QMainWindow):
             self.show_image()
 
     def get_docs(self):
-        popUp = FilesPopUp(self)
-        popUp.open_popup()
+        pop_up = FilesPopUp(self)
+        pop_up.open_popup()
 
     def get_image(self):
         arquivo = QFileDialog.getOpenFileName(self, 'Selecione o Arquivo', '', 'Todos Arquivos (*.*)')
         if arquivo:
-            imagePath = arquivo[0]
-            if imagePath:
-                self._images.append(imagePath)
+            image_path = arquivo[0]
+            if image_path:
+                self._images.append(image_path)
                 self.increase_index()
 
     def show_image(self):
         if self._images:
-            imagePath = self._images[self._index]
+            image_path = self._images[self._index]
             self.imagem_label.setStyleSheet(
-                f"background-color: rgb(0, 0, 0); border-image: url({imagePath}); background-position: center; background-repeat: norepeat; color: rgba(0, 0, 0, 0)")
+                f"background-color: rgb(0, 0, 0); border-image: url({image_path}); background-position: center; background-repeat: norepeat; color: rgba(0, 0, 0, 0)")
         else:
             self._reset_image()
 
     def edit_date_e(self):
         text = self.dataE_edit.text()
-        posicao = self.dataE_edit.cursorPosition()
-        if posicao > position_E_Add[-1]:
+        position = self.dataE_edit.cursorPosition()
+        if position > position_E_Add[-1]:
             if len(text) == 2 or len(text) == 5:
                 self.dataE_edit.setText(f'{text}/')
-        position_E_Add.append(posicao)
+        position_E_Add.append(position)
 
     def edit_date_s(self):
         text = self.dataS_edit.text()
-        posicao = self.dataS_edit.cursorPosition()
-        if posicao > position_S_Add[-1]:
+        position = self.dataS_edit.cursorPosition()
+        if position > position_S_Add[-1]:
             if len(text) == 2 or len(text) == 5:
                 self.dataS_edit.setText(f'{text}/')
-        position_S_Add.append(posicao)
+        position_S_Add.append(position)
 
-    @staticmethod
-    def go_back():
+    def go_back(self):
         # Retorna para a página principal
-        main_page = MainWindow()
+        main_page = MainWindow(self.user)
         widget.addWidget(main_page)
         widget.setCurrentIndex(widget.currentIndex() + 1)
 
@@ -1008,41 +1109,41 @@ class AddWindow(QMainWindow):
             f"background-color: rgb(0, 0, 0); border-image: url(); background-position: center; background-repeat: norepeat; color: rgba(0, 0, 0, 0)")
 
     def add_data(self):
-        # Adiciona os dados ao SQL, junto com data e hora de registro
+        # Adiciona os dados ao SQL, com data e hora de registro
         self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 0); border-radius: 10px;")
         self.error_label.setText('')
         plate = self.placa_edit.text().upper()
-        RDO = self.RDO_edit.text().upper()
-        entryDate = self.dataE_edit.text().upper()
-        dataS = self.dataS_edit.text().upper()
+        rdo = self.RDO_edit.text().upper()
+        entry_date = self.dataE_edit.text().upper()
+        data_s = self.dataS_edit.text().upper()
         vehicle = self.vehicle_edit.text().upper()
-        DP = self.DP_edit.text().upper()
+        dp = self.DP_edit.text().upper()
         status = self.status_comboBox.currentText().upper()
         patio = self.p_edit_2.text().upper()
         images = ';'.join(self._images)
         documents = ';'.join(self.documents)
 
         try:
-            verified_entryDate = verify_date(entryDate)
+            verified_entry_date = verify_date(entry_date)
         except:
-            verified_entryDate = False
+            verified_entry_date = False
 
         try:
-            verified_exitDate = verify_date(dataS)
+            verified_exit_date = verify_date(data_s)
         except:
-            verified_exitDate = False
+            verified_exit_date = False
 
         t = time.localtime()
         current_date = time.strftime("%d/%m/%Y", t)
         current_hour = time.strftime("%H:%M", t)
         if len(plate) == 7:
-            if len(entryDate) != 0:
+            if len(entry_date) != 0:
                 self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 0); border-radius: 10px;")
                 self.error_label.setText('')
-                if verified_entryDate:
+                if verified_entry_date:
                     if status == 'PATIO':
                         try:
-                            query_add = f"INSERT INTO registros (placa, veiculo, RDO, DP, estatus, patio, dataE, dataR, horaR, imagens, documentos) VALUES ('{plate}', '{vehicle}', '{RDO}', '{DP}', '{status}', '{patio}', '{entryDate}', '{current_date}', '{current_hour}' , '{images}', '{documents}')"
+                            query_add = f"INSERT INTO registros (placa, veiculo, RDO, DP, estatus, patio, dataE, dataR, horaR, imagens, documentos) VALUES ('{plate}', '{vehicle}', '{rdo}', '{dp}', '{status}', '{patio}', '{entry_date}', '{current_date}', '{current_hour}' , '{images}', '{documents}')"
                             cur.execute(query_add)
                             connection.commit()
                             self.placa_edit.setText('')
@@ -1065,11 +1166,11 @@ class AddWindow(QMainWindow):
                             self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
                             self.error_label.setText('Placa Já Cadastrada')
 
-                    elif status == 'RETIRADO' and len(dataS) != 0:
+                    elif status == 'RETIRADO' and len(data_s) != 0:
 
-                        if verified_exitDate:
+                        if verified_exit_date:
                             try:
-                                query_add = f"INSERT INTO registros (placa, veiculo, RDO, DP, estatus, patio, dataE, dataS, dataR, horaR, imagens, documentos) VALUES ('{plate}', '{vehicle}', '{RDO}', '{DP}', '{status}', '{patio}', '{entryDate}', '{dataS}', '{current_date}', '{current_hour}', '{images}', '{documents}')"
+                                query_add = f"INSERT INTO registros (placa, veiculo, RDO, DP, estatus, patio, dataE, dataS, dataR, horaR, imagens, documentos) VALUES ('{plate}', '{vehicle}', '{rdo}', '{dp}', '{status}', '{patio}', '{entry_date}', '{data_s}', '{current_date}', '{current_hour}', '{images}', '{documents}')"
                                 cur.execute(query_add)
                                 connection.commit()
                                 self.placa_edit.setText('')
@@ -1098,7 +1199,7 @@ class AddWindow(QMainWindow):
                                 "background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
                             self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
                             self.error_label.setText('Data de Saída Inválida')
-                    elif status == 'RETIRADO' and len(dataS) == 0:
+                    elif status == 'RETIRADO' and len(data_s) == 0:
                         self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
                         self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
                         self.error_label.setText('Preencha a Data de Saída')
@@ -1115,7 +1216,7 @@ class AddWindow(QMainWindow):
             self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
             self.error_label.setText('Placa Inválida')
 
-    def setExitDateVisible(self):
+    def set_exit_date_visible(self):
         # Altera a visibilidade da caixa de data de saída com base no seletor de status
         if self.status_comboBox.currentIndex() == 0:
             self.dataS_edit.setStyleSheet(
@@ -1135,21 +1236,22 @@ class AddWindow(QMainWindow):
 
 
 class AlterationVehicleWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, user):
         super(AlterationVehicleWindow, self).__init__()
         loadUi("paginas/AlterationVehicleScreen.ui", self)
+        self.user = user
         self.dataS_edit.setStyleSheet(
             "QLineEdit{border: 2px solid rgba(106, 106, 106,0); border-radius: 5px; padding: 5px; "
             "background-color: rgba(255,255,255,0); color: rgba(0,0,0,0);}")
         self.dataS_edit.setPlaceholderText('')
         self.dataS_edit.setReadOnly(True)
-        self.status_comboBox.currentIndexChanged.connect(self.setExitDateVisible)
-        self.save_button.clicked.connect(self.AddData)
-        self.back_button.clicked.connect(self.goBack)
-        self.placaAtual_edit.editingFinished.connect(self.Info)
+        self.status_comboBox.currentIndexChanged.connect(self.set_exit_date_visible)
+        self.save_button.clicked.connect(self.add_data)
+        self.back_button.clicked.connect(self.go_back)
+        self.placaAtual_edit.editingFinished.connect(self.info)
         self.image_button.clicked.connect(self.get_image)
-        self.dataE_edit.textEdited.connect(self.editDateE)
-        self.dataS_edit.textEdited.connect(self.editDateS)
+        self.dataE_edit.textEdited.connect(self.edit_date_e)
+        self.dataS_edit.textEdited.connect(self.edit_date_s)
         self.right_button.clicked.connect(self.increase_index)
         self.left_button.clicked.connect(self.decrease_index)
         self.remover_button.clicked.connect(self.remove_image)
@@ -1179,74 +1281,74 @@ class AlterationVehicleWindow(QMainWindow):
             self.show_image()
 
     def get_docs(self):
-        popUp = FilesPopUp(self)
-        popUp.show_from_parent()
-        popUp.open_popup()
+        pop_up = FilesPopUp(self)
+        pop_up.show_from_parent()
+        pop_up.open_popup()
 
     def get_image(self):
         arquivo = QFileDialog.getOpenFileName(self, 'Selecione o Arquivo', '', 'Todos Arquivos (*.*)')
         if arquivo:
-            imagePath = arquivo[0]
-            if imagePath:
-                self._images.append(imagePath)
+            image_path = arquivo[0]
+            if image_path:
+                self._images.append(image_path)
                 self.increase_index()
 
     def show_image(self):
         if self._images:
-            imagePath = self._images[self._index]
+            image_path = self._images[self._index]
             self.imagem_label.setStyleSheet(
-                f"background-color: rgb(0, 0, 0); border-image: url({imagePath}); background-position: center; background-repeat: norepeat; color: rgba(0, 0, 0, 0)")
+                f"background-color: rgb(0, 0, 0); border-image: url({image_path}); background-position: center; background-repeat: norepeat; color: rgba(0, 0, 0, 0)")
         else:
             self._reset_image()
 
-    def editDateE(self):
+    def edit_date_e(self):
         text = self.dataE_edit.text()
-        posicao = self.dataE_edit.cursorPosition()
-        if posicao > position_E_Alter[-1]:
+        position = self.dataE_edit.cursorPosition()
+        if position > position_E_Alter[-1]:
             if len(text) == 2 or len(text) == 5:
                 self.dataE_edit.setText(f'{text}/')
-        position_E_Alter.append(posicao)
+        position_E_Alter.append(position)
 
-    def editDateS(self):
+    def edit_date_s(self):
         text = self.dataS_edit.text()
-        posicao = self.dataS_edit.cursorPosition()
-        if posicao > position_S_Alter[-1]:
+        position = self.dataS_edit.cursorPosition()
+        if position > position_S_Alter[-1]:
             if len(text) == 2 or len(text) == 5:
                 self.dataS_edit.setText(f'{text}/')
-        position_S_Alter.append(posicao)
+        position_S_Alter.append(position)
 
-    def Info(self):
+    def info(self):
         plate = self.placaAtual_edit.text()
-        query_Info = f"select * from registros where placa = '{plate}'"
-        cur.execute(query_Info)
+        query_info = f"select * from registros where placa = '{plate}'"
+        cur.execute(query_info)
         result_info = cur.fetchone()[0:12]
         placa = result_info[0]
         veiculo = result_info[1]
-        RDO = result_info[2]
-        DP = result_info[3]
+        rdo = result_info[2]
+        dp = result_info[3]
         status = result_info[4].upper()
         patio = result_info[5]
-        dataE = result_info[6]
-        dataE = format_date_from_sql(dataE)
-        dataS = result_info[7]
+        data_e = result_info[6]
+        data_e = format_date_from_sql(data_e)
+        data_s = result_info[7]
         self._images = result_info[10].split(';')
         self.documents = result_info[11].split(';')
         if status == 'PATIO':
             self.status_comboBox.setCurrentIndex(0)
         elif status == 'RETIRADO':
             self.status_comboBox.setCurrentIndex(1)
-            dataS = format_date_from_sql(dataS)
+            data_s = format_date_from_sql(data_s)
         self.placa_edit.setText(placa)
         self.vehicle_edit.setText(veiculo)
-        self.RDO_edit.setText(RDO)
-        self.DP_edit.setText(DP)
+        self.RDO_edit.setText(rdo)
+        self.DP_edit.setText(dp)
         self.p_edit_2.setText(patio)
-        self.dataE_edit.setText(dataE)
-        self.dataS_edit.setText(dataS)
+        self.dataE_edit.setText(data_e)
+        self.dataS_edit.setText(data_s)
         self.show_image()
 
-    def goBack(self):
-        main_page = MainWindow()
+    def go_back(self):
+        main_page = MainWindow(self.user)
         widget.addWidget(main_page)
         widget.setCurrentIndex(widget.currentIndex() + 1)
 
@@ -1254,38 +1356,38 @@ class AlterationVehicleWindow(QMainWindow):
         self.imagem_label.setStyleSheet(
             f"background-color: rgb(0, 0, 0); border-image: url(); background-position: center; background-repeat: norepeat; color: rgba(0, 0, 0, 0)")
 
-    def AddData(self):
+    def add_data(self):
         self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 0); border-radius: 10px;")
         self.error_label.setText('')
         plate = self.placaAtual_edit.text().upper()
         placa = self.placa_edit.text().upper()
-        RDO = self.RDO_edit.text().upper()
-        dataE = self.dataE_edit.text().upper()
+        rdo = self.RDO_edit.text().upper()
+        data_e = self.dataE_edit.text().upper()
         veiculo = self.vehicle_edit.text().upper()
-        DP = self.DP_edit.text().upper()
+        dp = self.DP_edit.text().upper()
         patio = self.p_edit_2.text().upper()
-        dataS = self.dataS_edit.text().upper()
-        estatus = self.status_comboBox.currentText().upper()
-        imagens = ';'.join(self._images)
+        data_s = self.dataS_edit.text().upper()
+        status = self.status_comboBox.currentText().upper()
+        images = ';'.join(self._images)
         documentos = ';'.join(self.documents)
         t = time.localtime()
         current_date = time.strftime("%d/%m/%Y", t)
         current_hour = time.strftime("%H:%M", t)
         try:
-            verified_entryDate = verify_date(dataE)
+            verified_entry_date = verify_date(data_e)
         except:
-            verified_entryDate = False
+            verified_entry_date = False
 
         try:
-            verified_exitDate = verify_date(dataS)
+            verified_exit_date = verify_date(data_s)
         except:
-            verified_exitDate = False
+            verified_exit_date = False
 
         if len(placa) == 7:
-            if verified_entryDate:
-                if estatus == 'PATIO':
+            if verified_entry_date:
+                if status == 'PATIO':
                     try:
-                        query_add = f"UPDATE  registros SET placa='{placa}', veiculo='{veiculo}', RDO='{RDO}', DP='{DP}', estatus='{estatus}', patio = '{patio}', dataE='{dataE}', dataS=NULL, dataR='{current_date}', horaR='{current_hour}', imagens='{imagens}', documentos='{documentos}' WHERE placa='{plate}'"
+                        query_add = f"UPDATE  registros SET placa='{placa}', veiculo='{veiculo}', RDO='{rdo}', DP='{dp}', estatus='{status}', patio = '{patio}', dataE='{data_e}', dataS=NULL, dataR='{current_date}', horaR='{current_hour}', imagens='{images}', documentos='{documentos}' WHERE placa='{plate}'"
                         cur.execute(query_add)
                         connection.commit()
                         self.placaAtual_edit.setText('')
@@ -1308,10 +1410,10 @@ class AlterationVehicleWindow(QMainWindow):
                         self.error_label.setText('Placa Já Cadastrada')
                         return
 
-                elif estatus == 'RETIRADO' and len(dataS) != 0:
-                    if verified_exitDate:
+                elif status == 'RETIRADO' and len(data_s) != 0:
+                    if verified_exit_date:
                         try:
-                            query_add = f"UPDATE  registros SET placa = '{placa}', veiculo='{veiculo}', RDO='{RDO}', DP='{DP}', estatus='{estatus}', patio = '{patio}', dataE='{dataE}', dataS='{dataS}', dataR='{current_date}', horaR='{current_hour}', imagens='{imagens}' ,documentos='{documentos}' WHERE placa='{plate}'"
+                            query_add = f"UPDATE  registros SET placa = '{placa}', veiculo='{veiculo}', RDO='{rdo}', DP='{dp}', estatus='{status}', patio = '{patio}', dataE='{data_e}', dataS='{data_s}', dataR='{current_date}', horaR='{current_hour}', imagens='{images}' ,documentos='{documentos}' WHERE placa='{plate}'"
                             cur.execute(query_add)
                             connection.commit()
                             self.placaAtual_edit.setText('')
@@ -1322,14 +1424,16 @@ class AlterationVehicleWindow(QMainWindow):
                             self.DP_edit.setText('')
                             self.dataS_edit.setText('')
                             self.p_edit_2.setText('')
-                            self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
+                            self.erro_login.setStyleSheet(
+                                "background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
                             self.error_label.setStyleSheet('color: rgb(102,142,57);')
                             self.error_label.setText('Alteração Bem-Sucedida')
                             self._images = []
                             self._index = 0
                             self._reset_image()
                         except:
-                            self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
+                            self.erro_login.setStyleSheet(
+                                "background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
                             self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
                             self.error_label.setText('Placa Já Cadastrada')
                             return
@@ -1337,7 +1441,7 @@ class AlterationVehicleWindow(QMainWindow):
                         self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
                         self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
                         self.error_label.setText('Data de Saída Inválida')
-                elif estatus == 'RETIRADO' and len(dataS) == 0:
+                elif status == 'RETIRADO' and len(data_s) == 0:
                     self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
                     self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
                     self.error_label.setText('Preencha a Data de Saída')
@@ -1350,7 +1454,7 @@ class AlterationVehicleWindow(QMainWindow):
             self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
             self.error_label.setText('Placa Inválida')
 
-    def setExitDateVisible(self):
+    def set_exit_date_visible(self):
         # Altera a visibilidade da caixa de data de saída com base no seletor de status
         if self.status_comboBox.currentIndex() == 0:
             self.dataS_edit.setStyleSheet(
@@ -1370,101 +1474,161 @@ class AlterationVehicleWindow(QMainWindow):
 
 
 class ConfigWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, user):
         super(ConfigWindow, self).__init__()
         loadUi("paginas/ConfigScreen.ui", self)
+        self.user = user
         self.assunto_edit.setReadOnly(True)
-        self.login_label.setText(global_username)
-        self.name_label.setText(global_name)
-        self.surname_label.setText(global_surname)
-        self.email_label.setText(global_email)
-        self.back_button.clicked.connect(self.goBack)
-        self.edit_button.clicked.connect(self.goToChangeInfo)
-        self.subject_checkBox.stateChanged.connect(self.show_subject)
+        self.login_label.setText(self.user.usuario)
+        self.name_label.setText(self.user.nome)
+        self.surname_label.setText(self.user.sobrenome)
+        self.email_label.setText(self.user.email)
+        self.back_button.clicked.connect(self.go_back)
+        self.edit_button.clicked.connect(self.go_to_change_info)
+        self.assunto_checkBox.stateChanged.connect(self.show_subject)
         self.message_checkBox.stateChanged.connect(self.show_message)
+        self.emailU_checkBox.stateChanged.connect(self.show_email)
         self.confirm_button.clicked.connect(self.save_configurations)
+        self._relatorio_config = None
+        self.login_email = ''
+        self.password_email = ''
         self._subject_config = ''
         self._message_config = ''
         self._auto_message = """#saudacao,
-        
+
 Segue em anexo #conteudo, referentes ao #nome_do_arquivo
 
 Att"""
         self.get_from_config()
 
+    def show_email(self):
+        if self.emailU_checkBox.isChecked():
+            self.email_lineEdit.setStyleSheet(
+                "QLineEdit{border: 2px solid rgb(106, 106, 106);border-radius: 5px;padding: 5px;background-color: rgb(79, 79, 79);color: rgb(188, 188, 188);}"
+                "QLineEdit:hover{border: 2px solid rgb(117, 117, 179);}")
+            self.email_lineEdit.setText(self.user.email)
+            self.email_lineEdit.setReadOnly(True)
+        else:
+            self.email_lineEdit.setStyleSheet(
+                "QLineEdit{border: 2px solid rgb(106, 106, 106);border-radius: 5px;padding: 5px;background-color: #F0F0F0;color: rgb(0,0,0);}"
+                "QLineEdit:hover{border: 2px solid rgb(117, 117, 179);}"
+                "QLineEdit:focus{border: 2px solid rgb(117, 117, 179);color: rgb(40, 40, 40);}")
+            self.email_lineEdit.setText('')
+            self.email_lineEdit.setReadOnly(False)
 
     def show_subject(self):
-        if self.subject_checkBox.isChecked():
-            self.assunto_edit.setStyleSheet("QLineEdit{border: 2px solid rgb(106, 106, 106);border-radius: 5px;padding: 5px;background-color: rgb(79, 79, 79);color: rgb(188, 188, 188);}"
-                                            "QLineEdit:hover{border: 2px solid rgb(117, 117, 179);}")
+        if self.assunto_checkBox.isChecked():
+            self.assunto_edit.setStyleSheet(
+                "QLineEdit{border: 2px solid rgb(106, 106, 106);border-radius: 5px;padding: 5px;background-color: rgb(79, 79, 79);color: rgb(188, 188, 188);}"
+                "QLineEdit:hover{border: 2px solid rgb(117, 117, 179);}")
             self.assunto_edit.setText('Relatório PLACA ABC1234')
         else:
-            self.assunto_edit.setStyleSheet("QLineEdit{border: 2px solid rgb(106, 106, 106);border-radius: 5px;padding: 5px;background-color: #F0F0F0;color: rgb(0,0,0);}"
-                                             "QLineEdit:hover{border: 2px solid rgb(117, 117, 179);}"
-                                             "QLineEdit:focus{border: 2px solid rgb(117, 117, 179);color: rgb(40, 40, 40);}")
+            self.assunto_edit.setStyleSheet(
+                "QLineEdit{border: 2px solid rgb(106, 106, 106);border-radius: 5px;padding: 5px;background-color: #F0F0F0;color: rgb(0,0,0);}"
+                "QLineEdit:hover{border: 2px solid rgb(117, 117, 179);}"
+                "QLineEdit:focus{border: 2px solid rgb(117, 117, 179);color: rgb(40, 40, 40);}")
             self.assunto_edit.setText('')
 
     def show_message(self):
         if self.message_checkBox.isChecked():
-            self._message_config = self.textEdit.toPlainText()
-            self.textEdit.setStyleSheet(
+            self._message_config = self.message_textEdit.toPlainText()
+            self.message_textEdit.setStyleSheet(
                 "QTextEdit{border: 2px solid rgb(106, 106, 106);border-radius: 5px;padding: 5px;background-color: rgb(79, 79, 79);color: rgb(188, 188, 188);}"
                 "QTextEdit:hover{border: 2px solid rgb(117, 117, 179);}")
-            self.textEdit.setReadOnly(True)
-            self.textEdit.setPlainText(self._auto_message)
+            self.message_textEdit.setReadOnly(True)
+            self.message_textEdit.setPlainText(self._auto_message)
         else:
-            self.textEdit.setStyleSheet(
+            self.message_textEdit.setStyleSheet(
                 "QTextEdit{border: 2px solid rgb(106, 106, 106);border-radius: 5px;padding: 5px;background-color: #F0F0F0;color: rgb(0,0,0);}"
                 "QTextEdit:hover{border: 2px solid rgb(117, 117, 179);}"
                 "QTextEdit:focus{border: 2px solid rgb(117, 117, 179);color: rgb(40, 40, 40);}")
-            self.textEdit.setReadOnly(False)
-            self.textEdit.setPlainText(self._message_config)
+            self.message_textEdit.setReadOnly(False)
+            self.message_textEdit.setPlainText(self._message_config)
 
     def save_configurations(self):
         self._subject_config = ''
-        if self.subject_checkBox.isChecked():
+        if self.assunto_checkBox.isChecked():
             self._subject_config = 'mostrar'
         if self.message_checkBox.isChecked():
             self._message_config = self._auto_message
         else:
-            self._message_config = self.textEdit.toPlainText()
-        with open('conexao/email_configurations.txt','w') as email_config:
+            self._message_config = self.message_textEdit.toPlainText()
+        with open('conexao/email_configurations.txt', 'w') as email_config:
             email_config.write(f"""{self._subject_config}
-/
-{self._message_config}""")
+    /
+    {self._message_config}""")
         self._message_config = ''
 
+        if self.email_lineEdit.text():
+            self.login_email = self.email_lineEdit.text()
+        if self.senha_lineEdit.text():
+            self.password_email = self.senha_lineEdit.text()
+
+        with open("conexao/email_login.txt", "w") as email_login:
+            if self.login_email:
+                email_login.write(self.login_email + '\n')
+            if self.password_email:
+                email_login.write(self.password_email)
+
+        if self.relatorios_checkBox.isChecked():
+            self._relatorio_config = '1'
+        else:
+            self._relatorio_config = '0'
+
+        with open("conexao/config_relatorio.txt", "w") as relatorio_config:
+            relatorio_config.write(self._relatorio_config)
+
+        self.erro_login.setStyleSheet(
+            "background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
+        self.error_label.setStyleSheet('color: rgb(102,142,57);')
+        self.error_label.setText('Configurações Salvas')
+
     def get_from_config(self):
-        with open('conexao/email_configurations.txt','r') as email_config:
+        with open('conexao/email_configurations.txt', 'r') as email_config:
             content = email_config.read()
             if '/' in content:
                 self._subject_config = content.split('/')[0].strip()
                 self._message_config = content.split('/')[1].strip()
         if self._subject_config:
-            self.subject_checkBox.setChecked(True)
+            self.assunto_checkBox.setChecked(True)
         if self._message_config:
             if self._message_config == self._auto_message:
                 self.message_checkBox.setChecked(True)
             else:
-                self.textEdit.setPlainText(self._message_config)
+                self.message_textEdit.setPlainText(self._message_config)
 
-    def goBack(self):
+        with open("conexao/email_login.txt", "r") as email_login:
+            content = email_login.readlines()
+            if len(content) == 2:
+                self.login_email = content[0]
+                self.password_email = content[1]
+        self.email_lineEdit.setText(self.login_email)
+        self.senha_lineEdit.setText(self.password_email)
+
+        with open("conexao/config_relatorio.txt", "r") as relatorio_config:
+            content = relatorio_config.read()
+            self._relatorio_config = int(content)
+        if self._relatorio_config:
+            self.relatorios_checkBox.setChecked(True)
+
+    def go_back(self):
         # Retorna para a página principal
-        main_page = MainWindow()
+        main_page = MainWindow(self.user)
         widget.addWidget(main_page)
         widget.setCurrentIndex(widget.currentIndex() + 1)
 
-    def goToChangeInfo(self):
+    def go_to_change_info(self):
         # Vai para a página de alterar informações do usuário
-        changeInfoPage = AlterationConfigScreen()
-        widget.addWidget(changeInfoPage)
+        change_info_page = AlterationConfigScreen(self.user)
+        widget.addWidget(change_info_page)
         widget.setCurrentIndex(widget.currentIndex() + 1)
 
 
 class AlterationConfigScreen(QMainWindow):
-    def __init__(self):
+    def __init__(self, user):
         super(AlterationConfigScreen, self).__init__()
         loadUi("paginas/AlterationConfigScreen.ui", self)
+        self.user = user
         # Deixa os campos de Senha invisíveis
         self.currentPassword_edit.setStyleSheet(
             "QLineEdit{border: 2px solid rgba(106, 106, 106,0); border-radius: 5px; padding: 5px; "
@@ -1483,17 +1647,17 @@ class AlterationConfigScreen(QMainWindow):
             "background-color: rgba(255,255,255,0); color: rgba(0,0,0,0);}")
         self.confirmNewPassword_edit.setPlaceholderText('')
         self.confirmNewPassword_edit.setReadOnly(True)
-        self.changeInfo_button.clicked.connect(self.changeInfo)
-        self.password_checkBox.stateChanged.connect(self.checkBoxChangedAction)
-        self.back_button.clicked.connect(self.goBack)
+        self.changeInfo_button.clicked.connect(self.change_info)
+        self.password_checkBox.stateChanged.connect(self.check_box_changed_action)
+        self.back_button.clicked.connect(self.go_back)
 
-    def goBack(self):
+    def go_back(self):
         # Retorna para a página principal
-        main_page = ConfigWindow()
+        main_page = ConfigWindow(self.user)
         widget.addWidget(main_page)
         widget.setCurrentIndex(widget.currentIndex() + 1)
 
-    def checkBoxChangedAction(self):
+    def check_box_changed_action(self):
         if self.password_checkBox.isChecked() is False:
             self.currentPassword_edit.setStyleSheet(
                 "QLineEdit{border: 2px solid rgba(106, 106, 106,0); border-radius: 5px; padding: 5px; "
@@ -1535,7 +1699,7 @@ class AlterationConfigScreen(QMainWindow):
             self.confirmNewPassword_edit.setPlaceholderText('Confirme a Nova Senha')
             self.confirmNewPassword_edit.setReadOnly(False)
 
-    def changeInfo(self):
+    def change_info(self):
         # Altera as informações do usuário no SQL, mantendo iguais os campos em branco
         self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 0); border-radius: 10px;")
         self.error_label.setText('')
@@ -1543,17 +1707,17 @@ class AlterationConfigScreen(QMainWindow):
         surname = self.surname_edit.text()
         email = self.email_edit.text()
         password = self.currentPassword_edit.text()
-        newPassword = self.newPassword_edit.text()
-        confirmNewPassword = self.confirmNewPassword_edit.text()
+        new_password = self.newPassword_edit.text()
+        confirm_new_password = self.confirmNewPassword_edit.text()
         if name == '':
-            name = global_name
+            name = self.user.nome
         if surname == '':
-            surname = global_surname
+            surname = self.user.sobrenome
         if email == '':
-            email = global_email
+            email = self.user.email
         try:
             if '@' in email:
-                query_alter = f"UPDATE  logins SET nome = '{name}', sobrenome = '{surname}', email = '{email}' WHERE loginUsuario='{global_username}';"
+                query_alter = f"UPDATE  logins SET nome = '{name}', sobrenome = '{surname}', email = '{email}' WHERE loginUsuario='{self.user.usuario}';"
                 cur.execute(query_alter)
                 connection.commit()
                 self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
@@ -1570,13 +1734,13 @@ class AlterationConfigScreen(QMainWindow):
                     self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
                     self.error_label.setText('Insira a Senha Atual')
                     return
-                query = f"SELECT * FROM logins WHERE loginUsuario = '{global_username}' and pwdcompare('{password}', senhaUsuario) = 1"
+                query = f"SELECT * FROM logins WHERE loginUsuario = '{self.user.usuario}' and pwdcompare('{password}', senhaUsuario) = 1"
                 cur.execute(query)
                 user = cur.fetchone()[1]
-                if user == global_username:
-                    if newPassword != '' and confirmNewPassword != '':
-                        if newPassword == confirmNewPassword:
-                            query_alter = f"DECLARE @novasenha NVARCHAR(256) = '{newPassword}' UPDATE logins SET senhaUsuario = (CONVERT(VARBINARY(256),PWDENCRYPT(@novasenha))) WHERE loginUsuario = '{global_username}'"
+                if user == self.user.usuario:
+                    if new_password != '' and confirm_new_password != '':
+                        if new_password == confirm_new_password:
+                            query_alter = f"DECLARE @novasenha NVARCHAR(256) = '{new_password}' UPDATE logins SET senhaUsuario = (CONVERT(VARBINARY(256),PWDENCRYPT(@novasenha))) WHERE loginUsuario = '{self.user.usuario}'"
                             cur.execute(query_alter)
                             connection.commit()
                             self.erro_login.setStyleSheet(
@@ -1611,20 +1775,21 @@ class RegisterWindow(QMainWindow):
         super(RegisterWindow, self).__init__()
         loadUi("paginas/RegisterScreen.ui", self)
         self.register_button.clicked.connect(self.register)
-        self.Logout_Button_2.clicked.connect(self.goToLogin)
+        self.Logout_Button_2.clicked.connect(self.go_to_login)
 
-    def goToLogin(self):
+    @staticmethod
+    def go_to_login():
         # Realiza logout e vai pra tela de login
-        logIn_page = LoginWindow()
-        widget.addWidget(logIn_page)
+        log_in_page = LoginWindow()
+        widget.addWidget(log_in_page)
         try:
-            query_remember = "SELECT loginUsuario FROM logins WHERE record_User = 1"
-            cur.execute(query_remember)
-            remembered_user = cur.fetchone()[0]
-            logIn_page.login_edit.setText(remembered_user)
-            logIn_page.RememberLoginBox.setChecked(True)
+            query_remember_user = "SELECT loginUsuario FROM logins WHERE record_User = 1"
+            cur.execute(query_remember_user)
+            user = cur.fetchone()[0]
+            log_in_page.login_edit.setText(user)
+            log_in_page.RememberLoginBox.setChecked(True)
         except:
-            logIn_page.login_edit.setText('')
+            log_in_page.login_edit.setText('')
         widget.setCurrentIndex(widget.currentIndex() + 1)
         widget.showMaximized()
 
@@ -1635,13 +1800,13 @@ class RegisterWindow(QMainWindow):
         login = self.login_edit.text()
         email = self.email_edit.text()
         password = self.password_edit.text()
-        confirmPassword = self.confirmpassword_edit.text()
+        confirm_password = self.confirmpassword_edit.text()
         if len(name) == 0 or len(surname) == 0 or len(login) == 0 or len(email) == 0 or len(password) == 0 or len(
-                confirmPassword) == 0:
+                confirm_password) == 0:
             self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
             self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
             self.error_label.setText('Preencha Todos os Campos')
-        elif password != confirmPassword:
+        elif password != confirm_password:
             self.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
             self.error_label.setStyleSheet('color: rgb(208, 0, 0);')
             self.error_label.setText('As Senhas não Conferem')
@@ -1665,16 +1830,16 @@ class RegisterWindow(QMainWindow):
 
 def format_date_from_sql(date):
     # Função para formatar todas as datas vindas do SQL
-    dateSplit = date.split('-')
-    year = dateSplit[0]
-    month = dateSplit[1]
-    day = dateSplit[2]
+    date_split = date.split('-')
+    year = date_split[0]
+    month = date_split[1]
+    day = date_split[2]
     return f"{day}/{month}/{year}"
 
 
 def verify_date(date):
-    # Essa função verifica se a data inputada é possível (se não está no futuro, se não tem mais dias
-    # do que o mes possui, se o mes não é maior que 12, etc.
+    # Essa função verifica se a data inserida é possível (se não está no futuro, se não tem mais dias
+    # do que o mes possui, se o mes não é maior que 12, etc.)
     t = time.localtime()
     day = int(date.split('/')[0])
     month = int(date.split('/')[1])
@@ -1710,8 +1875,9 @@ def verify_date(date):
 
 
 def days_until(strdate):
-    # Essa função verifica se falta menos de um mês para uma data (parametro strdate), ou se ela ja passou
+    # Essa função verifica se falta menos de um mês para uma data (parâmetro strdate), ou se ela ja passou
     # retorna True para caso tenha passado ou faltem 30 dias, ou False caso falte mais de 30
+    days_of_month = None
     date = strdate.split('/')
     due_day = int(date[0])
     due_month = int(date[1])
@@ -1765,23 +1931,22 @@ def set_license(hidden_file, file):
         new_file.write(original_content[2])
 
 
-def validate_license(license):
-    with open(fr"{license}","r", encoding='UTF-8') as file_hidden:
-        mensagem = ''
+def validate_license(user_license):
+    with open(fr"{user_license}", "r", encoding='UTF-8') as file_hidden:
         global due_date
         due_date = '00/00/0000'
-        IP_maquina = gma()
+        ip_maquina = gma()
         content = file_hidden.read()
         if not content:
-            set_license(license, 'license.txt')
+            set_license(user_license, 'license.txt')
             content = file_hidden.read()
         if '-' not in content:
-            set_license(license, 'license.txt')
+            set_license(user_license, 'license.txt')
             content = file_hidden.read()
             if '-' not in content:
                 return 'Licença de Uso Vencida'
 
-        IP_license = content.split('-')[0]
+        ip_license = content.split('-')[0]
         month = int(content.split('-')[3])
         day = int(content.split('-')[6])
         year = int(content.split('-')[-3])
@@ -1790,37 +1955,32 @@ def validate_license(license):
         current_day = int(time.strftime("%d", t))
         current_month = int(time.strftime("%m", t))
         current_year = int(time.strftime("%y", t))
-        if IP_maquina != IP_license:
-            mensagem = 'Licença de Uso Inválida'
-            return mensagem
-        elif IP_maquina == IP_license:
+        if ip_maquina != ip_license:
+            return 'Licença de Uso Inválida'
+        elif ip_maquina == ip_license:
             if current_year > year:
-                mensagem = 'Licença de Uso Vencida'
-                return mensagem
+                return 'Licença de Uso Vencida'
             elif current_year == year:
                 if current_month > month:
-                    mensagem = 'Licença de Uso Vencida'
-                    return mensagem
+                    return 'Licença de Uso Vencida'
                 if current_month == month:
                     if current_day > day:
-                        mensagem = 'Licença de Uso Vencida'
-                        return mensagem
-
-        if mensagem == 'Licença de Uso Vencida':
-            with open(fr"conexao/{license}","w", encoding='UTF-8') as file_hiddenUsed:
-                file_hiddenUsed.write('Licença de Uso Vencida')
+                        return 'Licença de Uso Vencida'
 
 
 mensagem = validate_license('python3.dll.txt')
+if mensagem == 'Licença de Uso Vencida':
+    with open(fr"conexao/'python3.dll.txt'", "w", encoding='UTF-8') as file_hiddenUsed:
+        file_hiddenUsed.write('Licença de Uso Vencida')
 
-with open(r"conexao/connection.txt", "r") as file:
+with open(r"conexao/connection.txt", "r") as SQL_connection_file:
     # Le o arquivo com os dados da conexão SQL
-    f = file.read()
+    file_content = SQL_connection_file.read()
 
 if mensagem != 'Licença de Uso Inválida' and mensagem != 'Licença de Uso Vencida':
     try:
-        # Tenta realizar a conexão com o SQL, e emite a mensagem na tela de login caso não consiga
-        connection_data = ("Driver={SQL Server};" + f)
+        # Tenta realizar a conexão com o SQL, e emite a mensagem na tela de ‘login’ caso não consiga
+        connection_data = ("Driver={SQL Server};" + file_content)
         connection = pyodbc.connect(connection_data)
         cur = connection.cursor()
     except:
@@ -1849,7 +2009,9 @@ widget.setMinimumWidth(608)
 widget.setMinimumHeight(611)
 
 widget.show()
+
 if days_until(due_date):
-    LicenseWarning = AvisoLicencaPopUp()
-    LicenseWarning.openLicensePopUp()
+    LicenseWarning = LicenceWarningPopUp()
+    LicenseWarning.open_license_pop_up()
+
 sys.exit(app.exec_())
