@@ -235,7 +235,7 @@ class ConsultWindow(QMainWindow):
     def open_pop_up(self):
         # Cria o arquivo excel e abre o popup
         self.create_pdf()
-        popup_window = EmailPopUpWindow(self)
+        popup_window = EmailPopUpWindow(self, self.user)
         popup_window.open_page()
 
     def create_pdf(self):
@@ -666,9 +666,10 @@ class ConsultWindow(QMainWindow):
 
 
 class EmailPopUpWindow(QDialog):
-    def __init__(self, parent):
+    def __init__(self, parent, user):
         super(EmailPopUpWindow, self).__init__()
         loadUi("paginas/ImageNamePopup.ui", self)
+        self.user = user
         self.setWindowTitle('Envio de E-mail')
         self.save_button.clicked.connect(self.send_mail)
         self.textEdit.textChanged.connect(self.switch_color_message)
@@ -913,8 +914,26 @@ Att""" == self._message_config:
 
             self.textEdit.setPlainText(self._message_config)
 
+    @staticmethod
+    def decrypt(message):
+        key = len(message)
+        result_message = ''
+        for i, character in enumerate(message):
+            if i % 2 == 0:
+                if ord(character) - key < 33:
+                    result_message += str(chr(ord(character) - key + 95))
+                else:
+                    result_message += str(chr(ord(character) - key))
+            else:
+                if ord(character) + key > 126:
+                    result_message += str(chr(ord(character) + key - 95))
+                else:
+                    result_message += str(chr(ord(character) + key))
+
+        return result_message
+
     def send_mail(self):
-        # Envia o e-mail de relatório da tabela para o e-mail atrelado ao usuário. NECESSITA CADASTRO NO OUTLOOK
+        # Envia o e-mail de relatório da tabela para o e-mail atrelado ao usuário.
         try:
             if self._total_size > 26214400:
                 return
@@ -922,10 +941,11 @@ Att""" == self._message_config:
                 self.email_edit.setPlaceholderText('Email (Campo Obrigatório)')
                 return
 
-            with open(r'conexao/email_login.txt', 'r') as email_data:
-                content = email_data.readlines()
-                email = content[0].strip()
-                senha = content[1].strip()
+            get_login_query = f"SELECT email_login, email_senha WHERE loginUsuario = '{self.user.usuario}'"
+            cur.execute(get_login_query)
+            login_info = cur.fetchone[0]
+            email = login_info[0]
+            senha = self.decrypt(login_info[1])
 
             usuario = yagmail.SMTP(user=email, password=senha)
             remetentes = [emails.strip() for emails in self.email_edit.text().split(';')]
@@ -1545,7 +1565,44 @@ Att"""
             self.message_textEdit.setReadOnly(False)
             self.message_textEdit.setPlainText(self._message_config)
 
+    @staticmethod
+    def encrypt(message):
+        key = len(message)
+        result_message = ''
+        for i, character in enumerate(message):
+            if i % 2 == 0:
+                if ord(character) + key > 126:
+                    result_message += str(chr(ord(character) + key - 94))
+                else:
+                    result_message += str(chr(ord(character) + key))
+            else:
+                if ord(character) - key < 33:
+                    result_message += str(chr(ord(character) - key + 94))
+                else:
+                    result_message += str(chr(ord(character) - key))
+
+        return result_message
+
+    @staticmethod
+    def decrypt(message):
+        key = len(message)
+        result_message = ''
+        for i, character in enumerate(message):
+            if i % 2 == 0:
+                if ord(character) - key < 33:
+                    result_message += str(chr(ord(character) - key + 95))
+                else:
+                    result_message += str(chr(ord(character) - key))
+            else:
+                if ord(character) + key > 126:
+                    result_message += str(chr(ord(character) + key - 95))
+                else:
+                    result_message += str(chr(ord(character) + key))
+
+        return result_message
+
     def save_configurations(self):
+        # Configurações da mensagem e assunto padrão do email
         self._subject_config = ''
         if self.assunto_checkBox.isChecked():
             self._subject_config = 'mostrar'
@@ -1559,17 +1616,22 @@ Att"""
     {self._message_config}""")
         self._message_config = ''
 
+        # Configuração de ‘login’ e senha do email
         if self.email_lineEdit.text():
             self.login_email = self.email_lineEdit.text()
         if self.senha_lineEdit.text():
-            self.password_email = self.senha_lineEdit.text()
+            self.password_email = self.encrypt(self.senha_lineEdit.text())
 
-        with open("conexao/email_login.txt", "w") as email_login:
-            if self.login_email:
-                email_login.write(self.login_email + '\n')
-            if self.password_email:
-                email_login.write(self.password_email)
+        if self.password_email:
+            query_password = f"UPDATE logins SET email_senha = '{self.password_email}' WHERE loginUsuario = '{self.user.usuario}'"
+            cur.execute(query_password)
+            connection.commit()
+        if self.login_email:
+            query_email = f"UPDATE logins SET email_login = '{self.login_email}' WHERE loginUsuario='{self.user.usuario}';"
+            cur.execute(query_email)
+            connection.commit()
 
+        # Configuração de relatório único/múltiplo
         if self.relatorios_checkBox.isChecked():
             self._relatorio_config = '1'
         else:
@@ -1601,7 +1663,7 @@ Att"""
             content = email_login.readlines()
             if len(content) == 2:
                 self.login_email = content[0]
-                self.password_email = content[1]
+                self.password_email = self.decrypt(content[1])
         self.email_lineEdit.setText(self.login_email)
         self.senha_lineEdit.setText(self.password_email)
 
