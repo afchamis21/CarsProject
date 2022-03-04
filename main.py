@@ -933,20 +933,7 @@ Att""" == self._message_config:
 
     @staticmethod
     def decrypt(message):
-        key = len(message)
-        result_message = ''
-        for i, character in enumerate(message):
-            if i % 2 == 0:
-                if ord(character) - key < 33:
-                    result_message += str(chr(ord(character) - key + 95))
-                else:
-                    result_message += str(chr(ord(character) - key))
-            else:
-                if ord(character) + key > 126:
-                    result_message += str(chr(ord(character) + key - 95))
-                else:
-                    result_message += str(chr(ord(character) + key))
-
+        # decript function
         return result_message
 
     def send_mail(self):
