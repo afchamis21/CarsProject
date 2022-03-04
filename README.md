@@ -1,6 +1,8 @@
 # CarsProject
 Software to register, edit and visualize cars in a SQL Server database.
 
+Made in collaboration with Rafael Nascimento (rsdnrafael)
+
 Coded with Python and GUI's made with QtDesigner
 
 The code has some parts in portuguese and others in english because there were two developers. Also, the GUI is in portuguese because the project was developed for a Brazilian customer 
