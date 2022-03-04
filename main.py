@@ -1587,38 +1587,12 @@ Att"""
 
     @staticmethod
     def encrypt(message):
-        key = len(message)
-        result_message = ''
-        for i, character in enumerate(message):
-            if i % 2 == 0:
-                if ord(character) + key > 126:
-                    result_message += str(chr(ord(character) + key - 94))
-                else:
-                    result_message += str(chr(ord(character) + key))
-            else:
-                if ord(character) - key < 33:
-                    result_message += str(chr(ord(character) - key + 94))
-                else:
-                    result_message += str(chr(ord(character) - key))
-
+        # encription function
         return result_message
 
     @staticmethod
     def decrypt(message):
-        key = len(message)
-        result_message = ''
-        for i, character in enumerate(message):
-            if i % 2 == 0:
-                if ord(character) - key < 33:
-                    result_message += str(chr(ord(character) - key + 95))
-                else:
-                    result_message += str(chr(ord(character) - key))
-            else:
-                if ord(character) + key > 126:
-                    result_message += str(chr(ord(character) + key - 95))
-                else:
-                    result_message += str(chr(ord(character) + key))
-
+        # decription function
         return result_message
 
     def save_configurations(self):
