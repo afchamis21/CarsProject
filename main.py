@@ -215,12 +215,30 @@ class ConsultWindow(QMainWindow):
         self.right_button.clicked.connect(self.increase_index)
         self.left_button.clicked.connect(self.decrease_index)
         self.listWidget.itemDoubleClicked.connect(self.open_docs)
+        self.consult_edit.textEdited.connect(self.edit_date)
+        self.filter_comboBox.currentIndexChanged.connect(self.check_for_date)
         self.tableWidget.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.cursor_positions = [0]
         self.reports = []
         self.listWidget.hide()
         self._images = []
         self._index_images = 0
         self._documents = []
+
+    def check_for_date(self):
+        selector = self.filter_comboBox.currentText()
+        if selector == 'Data de Entrada' or selector == 'Data de Saida':
+            self.consult_edit.setText('')
+
+    def edit_date(self):
+        selector = self.filter_comboBox.currentText()
+        if selector == 'Data de Entrada' or selector == 'Data de Saida':
+            text = self.consult_edit.text()
+            position = self.consult_edit.cursorPosition()
+            if position > self.cursor_positions[-1]:
+                if len(text) == 2 or len(text) == 5:
+                    self.consult_edit.setText(f'{text}/')
+            self.cursor_positions.append(position)
 
     def go_to_alter(self):
         alteration_page = AlterationVehicleWindow(self.user)
@@ -493,7 +511,7 @@ class ConsultWindow(QMainWindow):
         search = self.consult_edit.text().upper()
 
         if selector == 'Placa':
-            query_search = f"SELECT * FROM registros WHERE placa = '{search}'"
+            query_search = f"SELECT * FROM registros WHERE placa LIKE '%{search}%'"
             cur.execute(query_search)
             result = cur.fetchall()
             self.tableWidget.setRowCount(len(result))
@@ -513,7 +531,7 @@ class ConsultWindow(QMainWindow):
                 column = 0
 
         elif selector == 'Modelo':
-            query_search = f"SELECT * FROM registros WHERE veiculo = '{search}'"
+            query_search = f"SELECT * FROM registros WHERE veiculo LIKE '%{search}%'"
             cur.execute(query_search)
             result = cur.fetchall()
             self.tableWidget.setRowCount(len(result))
@@ -533,7 +551,7 @@ class ConsultWindow(QMainWindow):
                 column = 0
 
         elif selector == 'RDO':
-            query_search = f"SELECT * FROM registros WHERE RDO = '{search}'"
+            query_search = f"SELECT * FROM registros WHERE RDO LIKE '%{search}%'"
             cur.execute(query_search)
             result = cur.fetchall()
             self.tableWidget.setRowCount(len(result))
@@ -552,8 +570,8 @@ class ConsultWindow(QMainWindow):
                 row += 1
                 column = 0
 
-        elif selector == 'Delegacia':
-            query_search = f"SELECT * FROM registros WHERE DP = '{search}'"
+        elif selector == 'DP':
+            query_search = f"SELECT * FROM registros WHERE DP LIKE '%{search}%'"
             cur.execute(query_search)
             result = cur.fetchall()
             self.tableWidget.setRowCount(len(result))
@@ -573,7 +591,7 @@ class ConsultWindow(QMainWindow):
                 column = 0
 
         elif selector == 'Status':
-            query_search = f"SELECT * FROM registros WHERE estatus = '{search}'"
+            query_search = f"SELECT * FROM registros WHERE estatus LIKE '%{search}%'"
             cur.execute(query_search)
             result = cur.fetchall()
             self.tableWidget.setRowCount(len(result))
@@ -593,7 +611,7 @@ class ConsultWindow(QMainWindow):
                 column = 0
 
         elif selector == 'Patio L.':
-            query_search = f"SELECT * FROM registros WHERE patio = '{search}'"
+            query_search = f"SELECT * FROM registros WHERE patio LIKE '%{search}%'"
             cur.execute(query_search)
             result = cur.fetchall()
             self.tableWidget.setRowCount(len(result))
@@ -905,7 +923,6 @@ Att""" == self._message_config:
         if self._auto_message:
             content = self._message_config.split('#')[1].split(',')[0]
             self._contents_message = self._contents_message.replace('/', '')
-
             if not self._contents_message:
                 self._contents_message = '/'
                 self._message_config = self._message_config.replace(content, self._contents_message)
@@ -941,9 +958,9 @@ Att""" == self._message_config:
                 self.email_edit.setPlaceholderText('Email (Campo Obrigatório)')
                 return
 
-            get_login_query = f"SELECT email_login, email_senha WHERE loginUsuario = '{self.user.usuario}'"
+            get_login_query = f"SELECT email_login, email_senha FROM logins WHERE loginUsuario = '{self.user.usuario}'"
             cur.execute(get_login_query)
-            login_info = cur.fetchone[0]
+            login_info = cur.fetchone()
             email = login_info[0]
             senha = self.decrypt(login_info[1])
 
@@ -955,7 +972,7 @@ Att""" == self._message_config:
                 assunto = ''
 
             if self.textEdit.toPlainText():
-                content = self.textEdit.toPlainText().replace('#', '')
+                content = self.textEdit.toPlainText().replace('#/', '').replace('#', '')
             else:
                 content = ""
 
@@ -966,6 +983,9 @@ Att""" == self._message_config:
             self.parent.error_label.setText('Email Enviado')
             self.close()
         except:
+            self.parent.erro_login.setStyleSheet("background-color: rgba(195, 195, 195, 1); border-radius: 10px;")
+            self.parent.error_label.setStyleSheet('color: rgb(208, 0, 0);')
+            self.parent.error_label.setText('Email Não Enviado')
             self.close()
 
     def switch_color_message(self):
@@ -1052,7 +1072,7 @@ class AddWindow(QMainWindow):
         self.save_button.clicked.connect(self.add_data)
         self.back_button.clicked.connect(self.go_back)
         self.image_button.clicked.connect(self.get_image)
-        self.dataE_edit.cursorPositionChanged.connect(self.edit_date_e)
+        self.dataE_edit.textEdited.connect(self.edit_date_e)
         self.dataS_edit.textEdited.connect(self.edit_date_s)
         self.right_button.clicked.connect(self.increase_index)
         self.left_button.clicked.connect(self.decrease_index)
@@ -1351,8 +1371,8 @@ class AlterationVehicleWindow(QMainWindow):
         data_e = result_info[6]
         data_e = format_date_from_sql(data_e)
         data_s = result_info[7]
-        self._images = result_info[10].split(';')
-        self.documents = result_info[11].split(';')
+        self._images = result_info[10].split(';') if result_info[10] else []
+        self.documents = result_info[11].split(';') if result_info[11] else []
         if status == 'PATIO':
             self.status_comboBox.setCurrentIndex(0)
         elif status == 'RETIRADO':
@@ -1659,11 +1679,12 @@ Att"""
             else:
                 self.message_textEdit.setPlainText(self._message_config)
 
-        with open("conexao/email_login.txt", "r") as email_login:
-            content = email_login.readlines()
-            if len(content) == 2:
-                self.login_email = content[0]
-                self.password_email = self.decrypt(content[1])
+        get_login_query = f"SELECT email_login, email_senha FROM logins WHERE loginUsuario = '{self.user.usuario}'"
+        cur.execute(get_login_query)
+        login_info = cur.fetchone()
+        self.login_email = login_info[0]
+        if login_info[1]:
+            self.password_email = self.decrypt(login_info[1])
         self.email_lineEdit.setText(self.login_email)
         self.senha_lineEdit.setText(self.password_email)
 
