@@ -1961,58 +1961,10 @@ def days_until(strdate):
     return False
 
 
-def set_license(hidden_file, file):
-    with open(fr"conexao/{file}", "r", encoding='UTF-8') as original_file:
-        original_content = original_file.readlines()
-    with open(fr"conexao/{file}", "w", encoding='UTF-8') as original_fileUsed:
-        for i, line in enumerate(original_content):
-            if i != 2:
-                original_fileUsed.write(line)
-            elif i == 2:
-                original_fileUsed.write('Licença Utilizada')
-
-    with open(fr"{hidden_file}", "w", encoding='UTF-8') as new_file:
-        new_file.write(original_content[2])
+# Funções para validação de licença
 
 
-def validate_license(user_license):
-    with open(fr"{user_license}", "r", encoding='UTF-8') as file_hidden:
-        global due_date
-        due_date = '00/00/0000'
-        ip_maquina = gma()
-        content = file_hidden.read()
-        if not content:
-            set_license(user_license, 'license.txt')
-            content = file_hidden.read()
-        if '-' not in content:
-            set_license(user_license, 'license.txt')
-            content = file_hidden.read()
-            if '-' not in content:
-                return 'Licença de Uso Vencida'
-
-        ip_license = content.split('-')[0]
-        month = int(content.split('-')[3])
-        day = int(content.split('-')[6])
-        year = int(content.split('-')[-3])
-        due_date = f'{day}/{month}/20{year}'
-        t = time.localtime()
-        current_day = int(time.strftime("%d", t))
-        current_month = int(time.strftime("%m", t))
-        current_year = int(time.strftime("%y", t))
-        if ip_maquina != ip_license:
-            return 'Licença de Uso Inválida'
-        elif ip_maquina == ip_license:
-            if current_year > year:
-                return 'Licença de Uso Vencida'
-            elif current_year == year:
-                if current_month > month:
-                    return 'Licença de Uso Vencida'
-                if current_month == month:
-                    if current_day > day:
-                        return 'Licença de Uso Vencida'
-
-
-mensagem = validate_license('python3.dll.txt')
+mensagem = validate_license('license.txt')
 if mensagem == 'Licença de Uso Vencida':
     with open(fr"conexao/'python3.dll.txt'", "w", encoding='UTF-8') as file_hiddenUsed:
         file_hiddenUsed.write('Licença de Uso Vencida')
