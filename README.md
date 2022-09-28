@@ -1,5 +1,4 @@
 # CarsProject
-Software to register, edit and visualize cars in a SQL Server database.
 Software para realizar CRUDs em um banco de dados SQL Server para um pátio de carros.
 
 Feito com Rafael Nascimento (<a href="https://github.com/rsdnrafael">rsdnrafael</a>)
